@@ -1,199 +1,133 @@
-#include "SDL\include\SDL.h"
-#include <iostream>
-#include <string.h>
-#pragma comment(lib, "SDL2.lib") 
-#pragma comment(lib, "SDL2main.lib") 
+#include "SDL/include/SDL.h"
+#include "SDL_image/include/SDL_image.h"
+#include "SDL_mixer/include/SDL_mixer.h"
 
-class Window {
-private:
-	SDL_Window *window_= NULL;
-	std::string title_;
-	int width_;
-	int height_;
+#pragma comment( lib, "../SDL/libx86/SDL2.lib")
+#pragma comment( lib, "../SDL/libx86/SDL2main.lib" )
+#pragma comment( lib, "../SDL_image/libx86/SDL2_image.lib")
+#pragma comment( lib, "../SDL_mixer/libx86/SDL2_mixer.lib")
 
-public: 
-	bool closed_ = false;
-	SDL_Renderer *renderer_ = NULL;
-	Window(const std::string &title ,int width, int height) {
-		title_ = title;
-		width_ = width;
-		height_ = height;
-		init();
-	}
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
-	~Window() {
-		SDL_DestroyWindow(window_);
-		SDL_DestroyRenderer(renderer_);
-		SDL_Quit();
-	}
-
-
-	void clear()  const {
-		SDL_SetRenderDrawColor(renderer_ , 0, 0, 255, 255);
-		SDL_RenderClear(renderer_);
-		
-	}
-	
-private:
-	void init() {
-		window_ = SDL_CreateWindow(
-			title_.c_str(),              // window title
-			SDL_WINDOWPOS_CENTERED,      // initial x position
-			SDL_WINDOWPOS_CENTERED,      // initial y position
-			width_,                      // width, in pixels
-			height_,                     // height, in pixels
-			SDL_WINDOW_SHOWN);           // flags - see below
-
-		renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
-	}
-
-};
-
-class Rect : public Window {
-
-public:
-	int w_, h_, x_, y_, r_, g_, b_, a_;
-	bool shot= false;
-	bool is_shoting = false;
-	Rect(const Window &window, int w, int h, int x, int y, int r, int g, int b, int a) : Window(window) {
-		w_ = w; h_ = h; x_ = x; y_ = y; r_ = r; g_ = g; b_ = b; a_ = a;
-		}
-
-	void draw() const {
-		SDL_Rect rect1;
-		rect1.w = w_;
-		rect1.h = h_;
-		rect1.x = x_;
-		rect1.y = y_;
-
-		SDL_SetRenderDrawColor(renderer_, r_, g_, b_, a_);
-		SDL_RenderFillRect(renderer_, &rect1);
-	}
-};
-
-class Shot : public Window {
-public:
-	int x_, y_;
-	Shot(const Window &window) : Window(window) {
-	}
-
-	void draw() const {
-		SDL_Rect rect1;
-		rect1.w = 60;
-		rect1.h = 10;
-		rect1.x = x_;
-		rect1.y = y_;
-
-		SDL_SetRenderDrawColor(renderer_, 0, 255, 0, 255);
-		SDL_RenderFillRect(renderer_, &rect1);
-	}
-
-	void move() {
-		x_ = x_ + 22;
-	}
-
+enum game_status
+{
+	GAME_CONTINUE = 1,
+	GAME_STOP,
+    GAME_ERROR
 };
 
 int main(int argc, char* argv[]) {
-	SDL_Init(SDL_INIT_EVERYTHING);
 
-	Window window("EpicGame", 800, 600);
-	Rect rect(window, 120, 120, 0, 0, 255, 0, 0, 255);
-	Shot shot(window);
-	SDL_Event event;
-	bool key_left = false, key_right = false, key_up = false;
-	bool key_down = false, key_escape = false, key_space = false;
+	//Variables
+	game_status game_state = GAME_CONTINUE;
 
-	while (window.closed_ == false) {
-		while (SDL_PollEvent(&event)) {
+	SDL_Surface* screen_surface = nullptr;
+	SDL_Surface* texture_surface = nullptr;
+	SDL_Surface* char_surface = nullptr;
 
-			if (event.type == SDL_QUIT) {
-				window.closed_ = true;
-			}
-			if (event.type == SDL_KEYDOWN) {
-				switch (event.key.keysym.sym) {
-				case SDLK_RIGHT:
-					key_right = true;
-					break;
-				case SDLK_LEFT:
-					key_left = true;
-					break;
-				case SDLK_UP:
-					key_up = true;
-					break;
-				case SDLK_DOWN:
-					key_down = true;
-					break;
-				case SDLK_SPACE:
-					key_space = true;
-					break;
-				case SDLK_ESCAPE:
-					key_escape = true;
-					break;
-				}
-			}
+	SDL_Window* window = nullptr;
 
-			if (event.type == SDL_KEYUP) {
-				switch (event.key.keysym.sym) {
-				case SDLK_RIGHT:
-					key_right = false;
-					break;
-				case SDLK_LEFT:
-					key_left = false;
-					break;
-				case SDLK_UP:
-					key_up = false;
-					break;
-				case SDLK_DOWN:
-					key_down = false;
-					break;
-				case SDLK_ESCAPE:
-					key_escape = false;
-					break;
-				case SDLK_SPACE:
-					key_space = false;
-					break;
-				}
-			}
+	SDL_Texture* texture = nullptr ;
+	SDL_Texture* char_texture = nullptr;
+
+	SDL_Renderer* renderer = nullptr;
+	SDL_Rect rect , rect2, section, section2;
+
+	Mix_Music *main_music;
+
+	const Uint8 *keyboard = nullptr;
+
+    //Inits
+	SDL_Init(SDL_INIT_VIDEO);
+	IMG_Init(IMG_INIT_PNG);
+	Mix_Init(MIX_INIT_OGG);
+
+	//Window	
+	window = SDL_CreateWindow ("Test", 
+		SDL_WINDOWPOS_UNDEFINED, 
+		SDL_WINDOWPOS_UNDEFINED, 
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT,
+		SDL_WINDOW_RESIZABLE);
+	screen_surface = SDL_GetWindowSurface(window);
+
+	//Render
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+
+	//Mixer
+	Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
+	main_music = Mix_LoadMUS("ugandan_sound.ogg");
+	Mix_VolumeMusic(40);
+	//Textures
+
+	     //Backgroud
+
+	texture_surface = IMG_Load("test.png");
+	texture = SDL_CreateTextureFromSurface(renderer, texture_surface);
+
+	section.x = section.y = 0;
+	section.w = 2560;
+	section.h = 1707;
+
+	rect.x = rect.y = 0;
+	rect.w = SCREEN_WIDTH;
+	rect.h = SCREEN_HEIGHT;
+
+	     //Character
+
+	char_surface = IMG_Load("ugandan.png");
+	char_texture = SDL_CreateTextureFromSurface(renderer, char_surface);
+
+	section2.x = section2.y = 0;
+	section2.w = 300;
+	section2.h = 300;
+
+	rect2.x = SCREEN_WIDTH/2;
+	rect2.y = SCREEN_HEIGHT/2;
+	rect2.w = 300;
+	rect2.h = 300;
+
+
+	Mix_PlayMusic(main_music, 2);
+
+
+	while (game_state == GAME_CONTINUE) {
+
+		SDL_PumpEvents();
+		keyboard = SDL_GetKeyboardState(NULL);
+
+		if (keyboard[SDL_SCANCODE_ESCAPE]) {
+			game_state = GAME_STOP;
+		}
+		if (keyboard[SDL_SCANCODE_A]) {
+			rect2.x -= 4;
+		}
+		if (keyboard[SDL_SCANCODE_D]) {
+			rect2.x += 4;
+		}
+		if (keyboard[SDL_SCANCODE_W]) {
+			rect2.y -= 4;
+		}
+		if (keyboard[SDL_SCANCODE_S]) {
+			rect2.y += 4;
 		}
 
-		if (key_left) {
-			rect.x_ -= 3;
-		}
-		if (key_right) {
-			rect.x_ += 3;
-		}
-		if (key_up) {
-			rect.y_ -= 3;
-		}
-		if (key_down) {
-			rect.y_ += 3;
-		}
-		if (key_escape) {
-			window.closed_ = true;
-		}
-		if (key_space && rect.is_shoting == false) {
-			rect.shot = true;
-		}
+		SDL_RenderClear(renderer);
+		SDL_RenderCopy(renderer, texture, &section, &rect);
+		SDL_RenderCopy(renderer, char_texture, &section2, &rect2);
 
-		window.clear();
+		SDL_RenderPresent(renderer);
 
-		if (rect.shot) {
-			shot.x_ = rect.x_;
-			shot.y_ = rect.y_ + 50;
-			rect.shot = false;
-			rect.is_shoting = true;
-		}
-		if (rect.is_shoting) {
-			shot.move();
-			shot.draw();
-			if (shot.x_ > 800) rect.is_shoting = false;
-		}
-		rect.draw();
-		SDL_RenderPresent(window.renderer_);
-		SDL_Delay(1000 / 60);
 	}
-	SDL_Quit();
-	return 0;
 
+	SDL_Quit();
+	IMG_Quit();
+	Mix_CloseAudio();
+	Mix_Quit();
+	return 0;
 }
+
+
+
